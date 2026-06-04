@@ -22,7 +22,11 @@ from urllib.error import HTTPError, URLError
 import json
 
 API_URL = "https://en.wikipedia.org/w/api.php"
-DEFAULT_CACHE_DIR = ".wikicache"
+# Default cache lives next to this script so all cached data is created under
+# the project folder, regardless of the current working directory.
+DEFAULT_CACHE_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".wikicache"
+)
 USER_AGENT = (
     "category-wordfreq/1.0 (word-frequency analysis script; "
     "contact: aidinabey@gmail.com)"
@@ -280,7 +284,7 @@ def main(argv=None):
     parser.add_argument(
         "--cache-dir", default=DEFAULT_CACHE_DIR,
         help="Directory for the local retrieval cache "
-        f"(default: {DEFAULT_CACHE_DIR}).",
+        "(default: a '.wikicache' folder next to this script).",
     )
     parser.add_argument(
         "--no-cache", action="store_true",
