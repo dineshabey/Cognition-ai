@@ -33,7 +33,7 @@ The `Category:` prefix is optional and underscores are treated as spaces, so
 | `--namespace N` | `0` | Category member namespace (`0` = articles). |
 | `--delay S` | `0.1` | Delay in seconds between page requests (be polite to the API). |
 | `--quiet` | off | Suppress progress output on stderr. |
-| `--cache-dir DIR` | `.wikicache` | Directory for the local retrieval cache. |
+| `--cache-dir DIR` | `<script dir>/.wikicache` | Directory for the local retrieval cache. |
 | `--no-cache` | off | Disable the cache and always fetch from the API. |
 | `--refresh` | off | Ignore cached data and re-fetch, overwriting the cache. |
 
@@ -42,10 +42,12 @@ The script retries automatically with exponential backoff on rate limiting
 
 ## Caching
 
-Retrieval results are cached on disk (under `.wikicache/` by default) so that
-re-running the script for the same category does **not** re-hit the MediaWiki
-API. Both the category member list and each page's extract are cached
-independently, keyed by category/namespace and page title respectively.
+Retrieval results are cached on disk so that re-running the script for the same
+category does **not** re-hit the MediaWiki API. By default the cache is a
+`.wikicache/` folder created **next to the script itself**, so all cached data
+always lives under the project folder no matter where you run the command from.
+Both the category member list and each page's extract are cached independently,
+keyed by category/namespace and page title respectively.
 
 The first run fetches everything and populates the cache; subsequent runs read
 from it (and skip the inter-request `--delay`), so they complete almost
