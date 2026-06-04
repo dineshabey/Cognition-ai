@@ -10,6 +10,8 @@ Example:
 """
 
 import argparse
+import hashlib
+import os
 import re
 import sys
 import time
@@ -20,6 +22,7 @@ from urllib.error import HTTPError, URLError
 import json
 
 API_URL = "https://en.wikipedia.org/w/api.php"
+DEFAULT_CACHE_DIR = ".wikicache"
 USER_AGENT = (
     "category-wordfreq/1.0 (word-frequency analysis script; "
     "contact: aidinabey@gmail.com)"
@@ -55,6 +58,56 @@ COMMON_WORDS = {
     "include", "including", "included", "another", "make", "made", "much",
     "see", "etc", "via",
 }
+
+
+class Cache:
+    """A tiny on-disk JSON cache so retrieval is not rerun for the same input.
+
+    Category member lists and page extracts are stored as individual JSON
+    files under ``<cache_dir>/categories`` and ``<cache_dir>/pages``. Keys are
+    hashed to keep filenames safe regardless of the title's characters.
+
+    When ``enabled`` is False the cache is a no-op (always a miss, never
+    writes), which lets callers ignore caching without special-casing it.
+    When ``refresh`` is True existing entries are ignored on read but still
+    overwritten on write, forcing a re-fetch of fresh data.
+    """
+
+    def __init__(self, cache_dir=DEFAULT_CACHE_DIR, enabled=True, refresh=False):
+        self.cache_dir = cache_dir
+        self.enabled = enabled
+        self.refresh = refresh
+        if self.enabled:
+            os.makedirs(os.path.join(cache_dir, "categories"), exist_ok=True)
+            os.makedirs(os.path.join(cache_dir, "pages"), exist_ok=True)
+
+    def _path(self, kind, key):
+        digest = hashlib.sha1(key.encode("utf-8")).hexdigest()
+        return os.path.join(self.cache_dir, kind, digest + ".json")
+
+    def get(self, kind, key):
+        """Return the cached payload for ``key`` or None on a miss."""
+        if not self.enabled or self.refresh:
+            return None
+        path = self._path(kind, key)
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh)["value"]
+        except (OSError, ValueError, KeyError):
+            return None
+
+    def set(self, kind, key, value):
+        """Persist ``value`` for ``key`` (best effort; ignores write errors)."""
+        if not self.enabled:
+            return
+        path = self._path(kind, key)
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump({"key": key, "value": value}, fh)
+            os.replace(tmp, path)
+        except OSError:
+            pass
 
 
 def api_get(params, max_retries=5):
@@ -104,12 +157,18 @@ def api_get(params, max_retries=5):
     raise RuntimeError("Exhausted retries contacting the MediaWiki API")
 
 
-def get_category_members(category, namespace=0):
+def get_category_members(category, namespace=0, cache=None):
     """Yield page titles belonging to a category (handling continuation)."""
     if category.lower().startswith("category:"):
         cmtitle = category
     else:
         cmtitle = "Category:" + category
+
+    cache_key = "{}|ns={}".format(cmtitle, namespace)
+    if cache is not None:
+        cached = cache.get("categories", cache_key)
+        if cached is not None:
+            return cached
 
     titles = []
     cont = {}
@@ -129,11 +188,18 @@ def get_category_members(category, namespace=0):
             cont = data["continue"]
         else:
             break
+    if cache is not None:
+        cache.set("categories", cache_key, titles)
     return titles
 
 
-def get_page_extract(title):
+def get_page_extract(title, cache=None):
     """Return the plain-text extract of a single page."""
+    if cache is not None:
+        cached = cache.get("pages", title)
+        if cached is not None:
+            return cached
+
     params = {
         "action": "query",
         "prop": "extracts",
@@ -143,9 +209,13 @@ def get_page_extract(title):
     }
     data = api_get(params)
     pages = data.get("query", {}).get("pages", {})
+    extract = ""
     for page in pages.values():
-        return page.get("extract", "") or ""
-    return ""
+        extract = page.get("extract", "") or ""
+        break
+    if cache is not None:
+        cache.set("pages", title, extract)
+    return extract
 
 
 WORD_RE = re.compile(r"[a-z]+(?:'[a-z]+)?")
@@ -156,21 +226,23 @@ def tokenize(text):
     return WORD_RE.findall(text.lower())
 
 
-def count_words(titles, min_length=2, delay=0.1, verbose=True):
+def count_words(titles, min_length=2, delay=0.1, verbose=True, cache=None):
     """Accumulate non-common word frequencies across all given page titles."""
     counter = Counter()
     total = len(titles)
     for i, title in enumerate(titles, 1):
+        cached = cache is not None and cache.get("pages", title) is not None
         if verbose:
-            print(f"[{i}/{total}] fetching: {title}", file=sys.stderr)
-        text = get_page_extract(title)
+            status = "cached" if cached else "fetching"
+            print(f"[{i}/{total}] {status}: {title}", file=sys.stderr)
+        text = get_page_extract(title, cache=cache)
         for word in tokenize(text):
             if len(word) < min_length:
                 continue
             if word in COMMON_WORDS:
                 continue
             counter[word] += 1
-        if delay:
+        if delay and not cached:
             time.sleep(delay)
     return counter
 
@@ -205,13 +277,34 @@ def main(argv=None):
         "--quiet", action="store_true",
         help="Suppress progress output on stderr.",
     )
+    parser.add_argument(
+        "--cache-dir", default=DEFAULT_CACHE_DIR,
+        help="Directory for the local retrieval cache "
+        f"(default: {DEFAULT_CACHE_DIR}).",
+    )
+    parser.add_argument(
+        "--no-cache", action="store_true",
+        help="Disable the local cache (always fetch from the API).",
+    )
+    parser.add_argument(
+        "--refresh", action="store_true",
+        help="Ignore cached data and re-fetch, overwriting the cache.",
+    )
     args = parser.parse_args(argv)
+
+    cache = Cache(
+        cache_dir=args.cache_dir,
+        enabled=not args.no_cache,
+        refresh=args.refresh,
+    )
 
     category = args.category.replace("_", " ")
     if not args.quiet:
         print(f"Fetching members of category: {category}", file=sys.stderr)
 
-    titles = get_category_members(category, namespace=args.namespace)
+    titles = get_category_members(
+        category, namespace=args.namespace, cache=cache
+    )
     if not titles:
         print(
             f"No pages found in category '{category}'. "
@@ -228,6 +321,7 @@ def main(argv=None):
         min_length=args.min_length,
         delay=args.delay,
         verbose=not args.quiet,
+        cache=cache,
     )
 
     total_tokens = sum(counter.values())
