@@ -55,6 +55,9 @@ instantly. Changing analysis options such as `--top` or `--min-length` reuses
 the cached page text. Use `--refresh` to force fresh data, `--no-cache` to
 bypass the cache entirely, or `--cache-dir` to point at a different location.
 
+The cache implementation lives in the `cache/` package (`cache/cache.py`),
+exposing the `Cache` class and a `make_cache(...)` helper.
+
 ## Example
 
 ```bash
