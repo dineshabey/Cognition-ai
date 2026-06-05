@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wikipedia Category Word Cloud</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script id="palettes-data" type="application/json">{{ palettes | tojson }}</script>
+  <script id="popular-categories-data" type="application/json">{{ popular_categories | tojson }}</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js" defer></script>
+  <script src="{{ url_for('static', filename='js/wordcloud-page.js') }}" defer></script>
+</head>
+<body>
+  <header class="header">
+    <h1>Wikipedia Category Word Cloud</h1>
+    <p class="subtitle">
+      Word sizes reflect frequency across all articles in a category.
+      Uses the local <code>.wikicache</code> when available.
+    </p>
+  </header>
+
+  <main class="main">
+    <form id="category-form" class="controls" autocomplete="off">
+      <label class="field field--category">
+        <span>Category</span>
+        <div class="combobox" id="category-combobox">
+          <input
+            type="text"
+            id="category-input"
+            name="category"
+            placeholder="Start typing for suggestions…"
+            value="Large language models"
+            required
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="false"
+            aria-controls="category-suggestions"
+            aria-autocomplete="list"
+          >
+          <ul
+            id="category-suggestions"
+            class="suggestions"
+            role="listbox"
+            hidden
+          ></ul>
+        </div>
+      </label>
+      <label class="field field--narrow">
+        <span>Max words</span>
+        <input type="number" id="top-input" name="top" value="120" min="10" max="500">
+      </label>
+      <label class="field field--narrow">
+        <span>Min length</span>
+        <input type="number" id="min-length-input" name="min_length" value="2" min="1" max="20">
+      </label>
+      <label class="field field--palette">
+        <span>Color palette</span>
+        <select id="palette-input" name="palette" aria-describedby="palette-preview">
+          {% for palette in palettes %}
+          <option value="{{ palette.name }}"{% if palette.name == default_palette %} selected{% endif %}>
+            {{ palette.label }}
+          </option>
+          {% endfor %}
+        </select>
+        <div id="palette-preview" class="palette-preview" title="Palette preview"></div>
+      </label>
+      <div class="actions">
+        <button type="submit" id="generate-btn">Generate</button>
+        <label class="checkbox">
+          <input type="checkbox" id="refresh-input" name="refresh">
+          Refresh cache
+        </label>
+      </div>
+    </form>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+
+    <section class="stats" id="stats" hidden>
+      <dl>
+        <div><dt>Category</dt><dd id="stat-category"></dd></div>
+        <div><dt>Pages</dt><dd id="stat-pages"></dd></div>
+        <div><dt>Unique words</dt><dd id="stat-unique"></dd></div>
+        <div><dt>Data source</dt><dd id="stat-source"></dd></div>
+      </dl>
+    </section>
+
+    <div class="cloud-wrap">
+      <canvas id="wordcloud-canvas" width="960" height="520" aria-label="Word cloud"></canvas>
+      <p id="cloud-placeholder" class="placeholder">
+        Enter a Wikipedia category and click Generate.
+      </p>
+    </div>
+  </main>
+</body>
+</html>

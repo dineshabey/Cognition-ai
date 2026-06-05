@@ -33,8 +33,8 @@ class Cache:
         self.enabled = enabled
         self.refresh = refresh
         if self.enabled:
-            os.makedirs(os.path.join(cache_dir, "categories"), exist_ok=True)
-            os.makedirs(os.path.join(cache_dir, "pages"), exist_ok=True)
+            for kind in ("categories", "pages", "results"):
+                os.makedirs(os.path.join(cache_dir, kind), exist_ok=True)
 
     def _path(self, kind, key):
         digest = hashlib.sha1(key.encode("utf-8")).hexdigest()

@@ -12,7 +12,41 @@ The script:
    and accumulates word counts across all pages.
 4. Prints the most frequent remaining ("non-common") words.
 
-No third-party dependencies — only the Python 3 standard library.
+The CLI script uses only the Python 3 standard library. The optional web app
+requires Flask (see [Web app](#web-app)).
+
+## Local setup (virtual environment)
+
+From the project folder:
+
+**Windows (PowerShell):**
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+**macOS / Linux:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+The CLI works without activating the venv if you only need `category_wordfreq.py`
+(stdlib only). For the web app, activate the venv first, then run `python app.py`.
+
+### Tests
+
+```powershell
+pip install -r requirements-dev.txt
+pytest
+```
+
+Tests use a temporary cache directory and mock Wikipedia API calls so they run
+offline.
 
 ## Usage
 
@@ -57,6 +91,27 @@ bypass the cache entirely, or `--cache-dir` to point at a different location.
 
 The cache implementation lives in the `cache/` package (`cache/cache.py`),
 exposing the `Cache` class and a `make_cache(...)` helper.
+
+## Web app
+
+A Flask UI renders an interactive word cloud (word size ∝ frequency). It reads
+from `.wikicache` when possible: cached **results** (precomputed frequencies),
+cached **pages** / **categories** (recompute counts without API calls), or
+fetches from the API on a cold start.
+
+```bash
+# after activating .venv (see Local setup)
+python app.py
+```
+
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000), enter a category, and click
+**Generate**. Use **Refresh cache** to ignore stored results and re-fetch from
+Wikipedia.
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /` | Word cloud page (HTML + JS) |
+| `GET /api/frequencies?category=...` | JSON word frequencies (`top`, `min_length`, `refresh`, etc.) |
 
 ## Example
 

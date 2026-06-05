@@ -58,6 +58,20 @@ COMMON_WORDS = {
     "see", "etc", "via",
 }
 
+# Common Wikipedia categories shown before the user types enough to search.
+POPULAR_CATEGORIES = (
+    "Large language models",
+    "Machine learning",
+    "Artificial intelligence",
+    "Natural language processing",
+    "Deep learning",
+    "Python programming language",
+    "Computer science",
+    "World War II",
+    "Nobel laureates",
+    "Living people",
+)
+
 
 def api_get(params, max_retries=5):
     """Perform a GET request against the MediaWiki API and return parsed JSON.
@@ -140,6 +154,48 @@ def get_category_members(category, namespace=0, cache=None):
     if cache is not None:
         cache.set("categories", cache_key, titles)
     return titles
+
+
+def search_category_suggestions(prefix="", limit=10):
+    """Return category name suggestions matching a prefix.
+
+    Uses a built-in popular list for short queries, then queries the
+    MediaWiki ``allcategories`` API for prefix matches.
+    """
+    prefix = prefix.replace("_", " ").strip()
+    limit = max(1, min(int(limit), 20))
+
+    if len(prefix) < 2:
+        return list(POPULAR_CATEGORIES[:limit])
+
+    popular_matches = [
+        cat for cat in POPULAR_CATEGORIES if prefix.lower() in cat.lower()
+    ]
+
+    params = {
+        "action": "query",
+        "list": "allcategories",
+        "acprefix": prefix,
+        "aclimit": str(limit),
+    }
+    data = api_get(params)
+    api_matches = []
+    for item in data.get("query", {}).get("allcategories", []):
+        name = item.get("*", "").replace("_", " ")
+        if name:
+            api_matches.append(name)
+
+    seen = set()
+    suggestions = []
+    for cat in popular_matches + api_matches:
+        key = cat.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(cat)
+        if len(suggestions) >= limit:
+            break
+    return suggestions
 
 
 def get_page_extract(title, cache=None):
